@@ -5,6 +5,7 @@ import (
 	"github.com/gobwas/pool/pbytes"
 	"github.com/pidato/audio/opus"
 	"github.com/pidato/audio/pool"
+	"github.com/pion/rtp"
 	"io"
 	"os"
 	"sync"
@@ -25,6 +26,7 @@ type Decoder struct {
 	opusFrameSize    int
 	opusFrameSizeInt int
 	pool             *pool.Pool
+	pcmPool          *pool.PCM
 
 	eof bool
 
@@ -42,7 +44,10 @@ type Decoder struct {
 	size               int
 	decoded            [][]int16
 
-	frameBuffer []int16
+	partial     []int16 // Partial frame buffer size.
+	frameBuffer [5760 * 2]int16
+
+	nextFrame []int16
 
 	maxReaderPCMLag int
 
@@ -80,14 +85,18 @@ func NewDecoder(sampleRate, ptime, maxFrames int) (*Decoder, error) {
 		return nil, err
 	}
 
+	pcmPool := p.ForPtime(ptime)
+
 	e := &Decoder{
 		sampleRate:     sampleRate,
 		ptime:          ptime,
 		buffer:         pbytes.GetLen(2880 * 2),
 		pool:           p,
-		pcmFrameSize:   p.PCM.FrameSize,
+		pcmPool:        pcmPool,
+		pcmFrameSize:   pcmPool.FrameSize,
 		maxFrames:      maxFrames,
 		decoded:        make([][]int16, maxFrames),
+		nextFrame:      nil,
 		decoder:        dec,
 		sampleDuration: time.Second / time.Duration(sampleRate),
 	}
@@ -215,7 +224,7 @@ func (e *Decoder) UnblockWriter() bool {
 	return false
 }
 
-func (e *Decoder) Write(frame *OpusFrame) error {
+func (e *Decoder) Write(packet []byte) error {
 	e.mu.Lock()
 	if e.closed {
 		e.mu.Unlock()
@@ -225,13 +234,13 @@ func (e *Decoder) Write(frame *OpusFrame) error {
 		e.mu.Unlock()
 		return io.EOF
 	}
-	// Take into account possible FEC frame.
+	// Take into account possible FEC packet.
 	if e.size >= len(e.decoded)-1 {
 		e.mu.Unlock()
 		return io.ErrShortBuffer
 	}
 
-	if err := e.doDecode(frame); err != nil {
+	if err := e.doDecode(packet); err != nil {
 		e.mu.Unlock()
 		return err
 	}
@@ -245,7 +254,7 @@ func (e *Decoder) Write(frame *OpusFrame) error {
 	return nil
 }
 
-func (e *Decoder) WriteBlocking(frame *OpusFrame) error {
+func (e *Decoder) WriteBlocking(packet []byte) error {
 	e.mu.Lock()
 	// Was it recently closed.
 	if e.closed {
@@ -256,9 +265,9 @@ func (e *Decoder) WriteBlocking(frame *OpusFrame) error {
 		e.mu.Unlock()
 		return io.EOF
 	}
-	// Take into account possible FEC frame.
+	// Take into account possible FEC packet.
 	if e.size >= len(e.decoded)-1 {
-		// Wait for reader to read next frame.
+		// Wait for reader to read next packet.
 		if !e.writerWait {
 			e.writerWait = true
 			e.writerWg.Add(1)
@@ -267,10 +276,10 @@ func (e *Decoder) WriteBlocking(frame *OpusFrame) error {
 		// Wait for next ReadFrame to free up a slot.
 		e.writerWg.Wait()
 		// Try Non-Blocking write. This may return error.
-		return e.Write(frame)
+		return e.Write(packet)
 	}
 
-	if err := e.doDecode(frame); err != nil {
+	if err := e.doDecode(packet); err != nil {
 		e.mu.Unlock()
 		return err
 	}
@@ -284,7 +293,83 @@ func (e *Decoder) WriteBlocking(frame *OpusFrame) error {
 	return nil
 }
 
-func (f *Decoder) doDecode(frame *OpusFrame) error {
+func (f *Decoder) WriteFEC(packet []byte, samples int) error {
+	if samples > len(f.frameBuffer) {
+		return ErrCorrupted
+	}
+
+	buf := f.frameBuffer[:samples]
+	err := f.decoder.DecodeFEC(packet, buf)
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
+func (f *Decoder) doDecode(packet []byte) error {
+	//switch frame.Samples {
+	//case 120: // 2.5ms
+	//case 240: // 5ms
+	//case 480: // 10ms
+	//case 960: // 20ms
+	//case 1920: // 40ms
+	//case 2880: // 60ms
+	//case 5760: // 120ms
+	//default:
+	//	return ErrCorrupted
+	//}
+
+	// Decode.
+	frameBuffer := f.frameBuffer[:]
+
+	n, err := f.decoder.Decode(packet, frameBuffer)
+	if err != nil {
+		return err
+	}
+
+	// Make sure it's a valid packet duration.
+	if n%120 != 0 { // Must be divisible by 2.5ms
+		return ErrCorrupted
+	}
+
+	frameBuffer = frameBuffer[:n]
+
+	if len(f.nextFrame) > 0 {
+		remaining := f.pcmFrameSize - len(f.nextFrame)
+		if remaining < 0 {
+			return ErrCorrupted
+		}
+		if remaining == n {
+			// Perfect match.
+		} else if remaining > n {
+
+		} else {
+
+		}
+	} else {
+		// Fit in with remaining.
+	}
+
+	switch n {
+	case 120: // 2.5ms
+	case 240: // 5ms
+	case 480: // 10ms
+	case 960: // 20ms
+	case 1920: // 40ms
+	case 2880: // 60ms
+	case 5760: // 120ms
+	default:
+		return ErrCorrupted
+	}
+
+	if len(f.nextFrame) > 0 {
+		// Is there a partial frame?
+		f.opusFrameSize
+	}
+
+	var pcm []int16
+
 	opusWritten := uint64(f.opusSamplesWritten)
 
 	// Missing any frames?
@@ -363,7 +448,7 @@ func (f *Decoder) doDecode(frame *OpusFrame) error {
 			return io.ErrShortWrite
 		}
 
-		// Write the pcm frame.
+		// Write the frameBuffer frame.
 		f.decoded[f.writerIndex%len(f.decoded)] = pcm
 		f.opusSamplesWritten += f.opusFrameSize
 		f.pcmSamplesWritten += len(pcm)

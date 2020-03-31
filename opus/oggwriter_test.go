@@ -61,22 +61,22 @@ func TestOpenWriter(t *testing.T) {
 	//if err != nil {
 	//	t.Fatal(err)
 	//}
-	//err = enc.SetMaxBandwidth(Mediumband)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
+	err = enc.SetMaxBandwidth(Wideband)
+	if err != nil {
+		t.Fatal(err)
+	}
 	//err = enc.SetBitrate(16000)
 	//if err != nil {
 	//	t.Fatal(err)
 	//}
-	//err = enc.SetDTX(true)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
-	//err = enc.SetInBandFEC(true)
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
+	err = enc.SetDTX(true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	err = enc.SetInBandFEC(true)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	packetizer := rtp.NewPacketizer(
 		1200,

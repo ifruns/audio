@@ -5,8 +5,6 @@
 package opus
 
 /*
-// Link opus using pkg-config.
-#cgo pkg-config: opus
 #include <opus.h>
 */
 import "C"

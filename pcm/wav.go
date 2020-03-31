@@ -44,6 +44,7 @@ type WavReader struct {
 	err error
 
 	pool           *pool.Pool
+	pcmPool        *pool.PCM
 	sampleRate     int
 	bytesPerSample uint16
 	samplesRead    int
@@ -92,6 +93,7 @@ func OpenWav(reader io.ReadCloser, ptime int) (*WavReader, error) {
 		_ = w.Close()
 		return nil, err
 	}
+	w.pcmPool = w.pool.ForPtime(ptime)
 
 	return w, nil
 }
@@ -133,7 +135,7 @@ func (f *WavReader) SampleRate() int {
 }
 
 func (f *WavReader) FrameSize() int {
-	return f.pool.PCM.FrameSize
+	return f.pcmPool.FrameSize
 }
 
 func (w *WavReader) Ptime() time.Duration {
@@ -141,18 +143,18 @@ func (w *WavReader) Ptime() time.Duration {
 }
 
 func (w *WavReader) Alloc() []int16 {
-	return w.pool.PCM.Get()
+	return w.pcmPool.Get()
 }
 
 func (w *WavReader) Release(p []int16) {
-	w.pool.PCM.Release(p)
+	w.pcmPool.Release(p)
 }
 
 func (w *WavReader) ReadFrame() ([]int16, error) {
-	buf := w.pool.PCM.Get()
+	buf := w.pcmPool.Get()
 	n, err := w.Read(buf)
 	if n <= 0 {
-		w.pool.PCM.Release(buf)
+		w.pcmPool.Release(buf)
 		return nil, err
 	}
 	if len(buf) != n {

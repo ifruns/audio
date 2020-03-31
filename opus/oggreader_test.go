@@ -12,6 +12,7 @@ import (
 )
 
 func TestReader(t *testing.T) {
+	//reader, err := OpenFile("testdata/speech_8.opus")
 	reader, err := OpenFile("testdata/1.opus")
 	//reader, err := OpenFile("testdata/ehren-paper_lights-96.opus")
 	//reader, err := OpenFile("testdata/1-raw.opus")
@@ -87,8 +88,8 @@ func TestReader(t *testing.T) {
 
 			fmt.Printf("Frame:\n")
 			fmt.Printf("\tOpus: %d\n", len(packet))
-			fmt.Printf("\tPage Grandule Pos: %d\n", reader.GranulePos())
-			fmt.Printf("\tGranule Pos: %d\n", granulePosition)
+			fmt.Printf("\tPage Grandule Sequence: %d\n", reader.GranulePos())
+			fmt.Printf("\tGranule Sequence: %d\n", granulePosition)
 			fmt.Printf("\tPCM: %d\n", len(pcm))
 
 			_, _ = pcmFile.Write(pcmBytes)

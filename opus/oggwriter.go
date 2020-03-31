@@ -15,6 +15,8 @@ var (
 	ErrPayloadNil      = errors.New("invalid nil payload")
 	ErrPayloadTooSmall = errors.New("payload is not big enough")
 	ErrFrameSize       = errors.New("frame size")
+
+	defaultVendor = "?????"
 )
 
 // OggWriter is used to take Opus RTP packets or raw Opus packets and write them to an OGG on disk
@@ -23,6 +25,7 @@ type OggWriter struct {
 	fd     *os.File
 
 	head          Head
+	tag           Tag
 	serial        uint32
 	pageIndex     uint32
 	eof           bool
@@ -39,13 +42,17 @@ type OggWriter struct {
 	mu sync.Mutex
 }
 
-// CreateFile builds a new OGG Opus writer
 func CreateFile(fileName string, sampleRate uint32, channelCount uint16) (*OggWriter, error) {
+	return CreateFileWithTag(fileName, sampleRate, channelCount, Tag{Vendor: defaultVendor})
+}
+
+// CreateFile builds a new OGG Opus writer
+func CreateFileWithTag(fileName string, sampleRate uint32, channelCount uint16, tag Tag) (*OggWriter, error) {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return nil, err
 	}
-	writer, err := OpenWriter(f, sampleRate, channelCount)
+	writer, err := OpenWriter(f, sampleRate, channelCount, tag)
 	if err != nil {
 		_ = f.Close()
 		return nil, err
@@ -55,7 +62,7 @@ func CreateFile(fileName string, sampleRate uint32, channelCount uint16) (*OggWr
 }
 
 // OpenWriter initialize a new OGG Opus writer with an io.OggWriter output
-func OpenWriter(out io.Writer, sampleRate uint32, channelCount uint16) (*OggWriter, error) {
+func OpenWriter(out io.Writer, sampleRate uint32, channelCount uint16, tag Tag) (*OggWriter, error) {
 	if out == nil {
 		return nil, fmt.Errorf("file not opened")
 	}
@@ -64,6 +71,7 @@ func OpenWriter(out io.Writer, sampleRate uint32, channelCount uint16) (*OggWrit
 		stream:      out,
 		serial:      rand.Uint32(),
 		maxSegments: 100,
+		tag:         tag,
 	}
 
 	writer.head.SampleRate = sampleRate
@@ -121,10 +129,11 @@ func (w *OggWriter) writeHeaders() error {
 		// ID Header
 		oggIDHeader := header[0:19]
 
-		copy(oggIDHeader[0:], idPageSignature)                             // Magic Signature 'OpusHead'
-		oggIDHeader[8] = 1                                                 // Version
-		oggIDHeader[9] = uint8(w.head.ChannelCount)                        // Channel count
-		binary.LittleEndian.PutUint16(oggIDHeader[10:], defaultPreSkip)    // pre-skip
+		copy(oggIDHeader[0:], idPageSignature)      // Magic Signature 'OpusHead'
+		oggIDHeader[8] = 1                          // Version
+		oggIDHeader[9] = uint8(w.head.ChannelCount) // Channel count
+		//binary.LittleEndian.PutUint16(oggIDHeader[10:], defaultPreSkip/4)    // pre-skip
+		binary.LittleEndian.PutUint16(oggIDHeader[10:], 312)               // pre-skip
 		binary.LittleEndian.PutUint32(oggIDHeader[12:], w.head.SampleRate) // original sample rate, any valid sample e.g 48000
 		binary.LittleEndian.PutUint16(oggIDHeader[16:], 0)                 // output gain
 		oggIDHeader[18] = 0                                                // channel map 0 = one stream: mono or stereo
@@ -140,6 +149,24 @@ func (w *OggWriter) writeHeaders() error {
 		w.pageIndex++
 	}
 
+	//size := len(commentPageSignature) + len(w.tag.Vendor) + 8 + (len(w.tag.Comments) * 4)
+	//for _, v := range w.tag.Comments {
+	//	size += len(v)
+	//}
+	//
+	//b := pbytes.GetLen(size)
+	//buf := bytes.NewBuffer(b)
+	//
+	//buf.WriteString(commentPageSignature)
+	//binary.LittleEndian.PutUint32(header[0:], uint32(len(w.tag.Vendor)))
+	//buf.Write(header[0:4])
+	//buf.WriteString(w.tag.Vendor)
+	//binary.LittleEndian.PutUint32(header[0:], uint32(len(w.tag.Comments)))
+	//buf.Write(header[0:4])
+	//
+	//// Return bytes to pool.
+	//pbytes.Put(b)
+
 	{
 		// Comment Header
 		oggCommentHeader := header[0:21]
@@ -151,6 +178,7 @@ func (w *OggWriter) writeHeaders() error {
 
 		w.page.SegmentCount = 1
 		w.segmentVector[0] = byte(len(oggCommentHeader))
+
 		// RFC specifies that the page where the CommentHeader completes should have a granule position of 0
 		err := w.writePage(oggCommentHeader, pageHeaderTypeContinuationOfStream, 0)
 		if err != nil {
@@ -159,12 +187,11 @@ func (w *OggWriter) writeHeaders() error {
 		w.pageIndex++
 	}
 
-	w.page.Version = 1
+	w.page.Version = 0
 	w.page.HeaderType = pageHeaderTypeContinuationOfStream
 	w.page.Checksum = 0
 	w.page.SegmentCount = 0
 	w.page.GranulePos = 0
-	w.pageIndex = 0
 
 	return nil
 }
@@ -296,6 +323,7 @@ func (w *OggWriter) writeSegments(packet []byte, samples int) error {
 	case 960: // 20ms
 	case 1920: // 40ms
 	case 2880: // 60ms
+	case 2880 * 2: // 120ms
 
 	default:
 		return ErrFrameSize
@@ -315,6 +343,10 @@ func (w *OggWriter) writeSegments(packet []byte, samples int) error {
 			if err != nil {
 				return err
 			}
+		}
+
+		if w.eof {
+			w.page.HeaderType = pageHeaderTypeEndOfStream
 		}
 
 		// Don't accept packets larger than what a single page buffer can hold.
@@ -343,7 +375,7 @@ func (w *OggWriter) writeSegments(packet []byte, samples int) error {
 		w.sampleCount += uint64(samples)
 
 		// Flush at least once per second.
-		if w.sampleCount%xMAX_BITRATE == 0 {
+		if w.sampleCount%xMAX_BITRATE == 0 || w.eof {
 			if err := w.flushPage(); err != nil {
 				return err
 			}
@@ -356,6 +388,10 @@ func (w *OggWriter) writeSegments(packet []byte, samples int) error {
 			}
 		}
 
+		if w.eof {
+			w.page.HeaderType = pageHeaderTypeEndOfStream
+		}
+
 		// Increment sample count.
 		w.sampleCount += uint64(samples)
 
@@ -366,7 +402,7 @@ func (w *OggWriter) writeSegments(packet []byte, samples int) error {
 		w.writerIndex += len(packet)
 
 		// Flush at least once per second.
-		if w.sampleCount%xMAX_BITRATE == 0 {
+		if w.sampleCount%xMAX_BITRATE == 0 || w.eof {
 			if err := w.flushPage(); err != nil {
 				return err
 			}
@@ -395,12 +431,8 @@ func (w *OggWriter) WriteEOF(packet []byte, samples int) error {
 	if w.eof {
 		return os.ErrClosed
 	}
-	if err := w.writeSegments(packet, samples); err != nil {
-		return err
-	}
 	w.eof = true
-	w.page.GranulePos = w.sampleCount
-	if err := w.flushEOF(); err != nil {
+	if err := w.writeSegments(packet, samples); err != nil {
 		return err
 	}
 	return nil

@@ -14,6 +14,7 @@ type Buffer struct {
 	sampleRate int
 	ptime      int
 	pool       *pool.Pool
+	pcmPool    *pool.PCM
 
 	eof bool
 
@@ -49,10 +50,13 @@ func NewBuffer(sampleRate, ptime, maxFrames int) (*Buffer, error) {
 		return nil, err
 	}
 
+	pcmPool := p.ForPtime(ptime)
+
 	b := &Buffer{
 		sampleRate:     sampleRate,
 		ptime:          ptime,
 		pool:           p,
+		pcmPool:        pcmPool,
 		eof:            false,
 		max:            maxFrames,
 		frames:         make([][]int16, maxFrames),
@@ -82,7 +86,7 @@ func (f *Buffer) SampleRate() int {
 }
 
 func (f *Buffer) FrameSize() int {
-	return f.pool.PCM.FrameSize
+	return f.pcmPool.FrameSize
 }
 
 func (f *Buffer) Ptime() time.Duration {
@@ -90,11 +94,11 @@ func (f *Buffer) Ptime() time.Duration {
 }
 
 func (f *Buffer) Alloc() []int16 {
-	return f.pool.PCM.Get()
+	return f.pcmPool.Get()
 }
 
 func (f *Buffer) Release(b []int16) {
-	f.pool.PCM.Release(b)
+	f.pcmPool.Release(b)
 }
 
 func (r *Buffer) Reset() error {
@@ -149,7 +153,7 @@ func (f *Buffer) Close() error {
 	}
 	// Release frames.
 	for i, buf := range f.frames {
-		f.pool.PCM.Release(buf)
+		f.pcmPool.Release(buf)
 		f.frames[i] = nil
 	}
 	f.frames = nil
@@ -164,15 +168,22 @@ func (f *Buffer) WriteFinal() error {
 		return io.ErrClosedPipe
 	}
 	f.eof = true
+	writerWait := f.writerWait
 	if f.writerWait {
 		f.writerWait = false
-		f.writerWg.Done()
 	}
+	readerWait := f.readerWait
 	if f.readerWait {
 		f.readerWait = false
-		f.readerWg.Done()
 	}
 	f.mu.Unlock()
+
+	if writerWait {
+		f.writerWg.Done()
+	}
+	if readerWait {
+		f.readerWg.Done()
+	}
 	return nil
 }
 
@@ -199,12 +210,15 @@ func (f *Buffer) Write(p []int16) error {
 	}
 
 	// Unblock reader.
+	readerWait := f.readerWait
 	if f.readerWait {
 		f.readerWait = false
+	}
+	f.mu.Unlock()
+
+	if readerWait {
 		f.readerWg.Done()
 	}
-
-	f.mu.Unlock()
 	return nil
 }
 
