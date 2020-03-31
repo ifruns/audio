@@ -5,7 +5,7 @@ import (
 	"github.com/gobwas/pool/pbytes"
 	"github.com/pidato/audio/opus"
 	"github.com/pidato/audio/pool"
-	"github.com/pion/rtp"
+	_ "github.com/pion/rtp"
 	"io"
 	"os"
 	"sync"
@@ -113,7 +113,7 @@ func (e *Decoder) SampleRate() int {
 }
 
 func (e *Decoder) FrameSize() int {
-	return e.pool.PCM.FrameSize
+	return e.pcmPool.FrameSize
 }
 
 func (e *Decoder) Ptime() time.Duration {
@@ -121,11 +121,11 @@ func (e *Decoder) Ptime() time.Duration {
 }
 
 func (e *Decoder) Alloc() []int16 {
-	return e.pool.PCM.Get()
+	return e.pcmPool.Get()
 }
 
 func (e *Decoder) Release(b []int16) {
-	e.pool.PCM.Release(b)
+	e.pcmPool.Release(b)
 }
 
 // Resets state
@@ -182,7 +182,7 @@ func (e *Decoder) Close() error {
 	}
 	// Release pcm.
 	for i, buf := range e.decoded {
-		e.pool.PCM.Release(buf)
+		e.pcmPool.Release(buf)
 		e.decoded[i] = nil
 	}
 	e.decoded = nil
