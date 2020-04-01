@@ -24,6 +24,7 @@ type Encoder struct {
 	opusFrameSize    int
 	opusFrameSizeInt int
 	pool             *pool.Pool
+	pcmPool          *pool.PCM
 
 	eof bool
 

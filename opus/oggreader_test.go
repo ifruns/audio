@@ -88,7 +88,7 @@ func TestReader(t *testing.T) {
 
 			fmt.Printf("Frame:\n")
 			fmt.Printf("\tOpus: %d\n", len(packet))
-			fmt.Printf("\tPage Grandule Sequence: %d\n", reader.GranulePos())
+			fmt.Printf("\tPage Granule Sequence: %d\n", reader.GranulePos())
 			fmt.Printf("\tGranule Sequence: %d\n", granulePosition)
 			fmt.Printf("\tPCM: %d\n", len(pcm))
 

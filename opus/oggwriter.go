@@ -42,17 +42,17 @@ type OggWriter struct {
 	mu sync.Mutex
 }
 
-func CreateFile(fileName string, sampleRate uint32, channelCount uint16) (*OggWriter, error) {
-	return CreateFileWithTag(fileName, sampleRate, channelCount, Tag{Vendor: defaultVendor})
+func CreateFile(fileName string, sampleRate uint32, channelCount uint16, preSkip uint16) (*OggWriter, error) {
+	return CreateFileWithTag(fileName, sampleRate, channelCount, preSkip, Tag{Vendor: defaultVendor})
 }
 
 // CreateFile builds a new OGG Opus writer
-func CreateFileWithTag(fileName string, sampleRate uint32, channelCount uint16, tag Tag) (*OggWriter, error) {
+func CreateFileWithTag(fileName string, sampleRate uint32, channelCount uint16, preSkip uint16, tag Tag) (*OggWriter, error) {
 	f, err := os.Create(fileName)
 	if err != nil {
 		return nil, err
 	}
-	writer, err := OpenWriter(f, sampleRate, channelCount, tag)
+	writer, err := OpenWriter(f, sampleRate, channelCount, preSkip, tag)
 	if err != nil {
 		_ = f.Close()
 		return nil, err
@@ -62,7 +62,7 @@ func CreateFileWithTag(fileName string, sampleRate uint32, channelCount uint16, 
 }
 
 // OpenWriter initialize a new OGG Opus writer with an io.OggWriter output
-func OpenWriter(out io.Writer, sampleRate uint32, channelCount uint16, tag Tag) (*OggWriter, error) {
+func OpenWriter(out io.Writer, sampleRate uint32, channelCount uint16, preSkip uint16, tag Tag) (*OggWriter, error) {
 	if out == nil {
 		return nil, fmt.Errorf("file not opened")
 	}
@@ -76,6 +76,7 @@ func OpenWriter(out io.Writer, sampleRate uint32, channelCount uint16, tag Tag) 
 
 	writer.head.SampleRate = sampleRate
 	writer.head.ChannelCount = byte(channelCount)
+	writer.head.PreSkip = preSkip
 
 	// page headers starts with 'OggS'
 	writer.pageHeaderBuf[0] = 'O'
@@ -133,7 +134,7 @@ func (w *OggWriter) writeHeaders() error {
 		oggIDHeader[8] = 1                          // Version
 		oggIDHeader[9] = uint8(w.head.ChannelCount) // Channel count
 		//binary.LittleEndian.PutUint16(oggIDHeader[10:], defaultPreSkip/4)    // pre-skip
-		binary.LittleEndian.PutUint16(oggIDHeader[10:], 312)               // pre-skip
+		binary.LittleEndian.PutUint16(oggIDHeader[10:], w.head.PreSkip)    // pre-skip
 		binary.LittleEndian.PutUint32(oggIDHeader[12:], w.head.SampleRate) // original sample rate, any valid sample e.g 48000
 		binary.LittleEndian.PutUint16(oggIDHeader[16:], 0)                 // output gain
 		oggIDHeader[18] = 0                                                // channel map 0 = one stream: mono or stereo

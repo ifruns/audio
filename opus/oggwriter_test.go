@@ -92,7 +92,7 @@ func TestOpenWriter(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	opusWriter, err := CreateFile("testdata/1.opus", uint32(sampleRate), 1)
+	opusWriter, err := CreateFile("testdata/1.opus", uint32(sampleRate), 1, 0)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -225,7 +225,7 @@ func TestOggWriter_AddPacketAndClose(t *testing.T) {
 	}
 
 	// First test case has a 'nil' file descriptor
-	writer, err := OpenWriter(addPacketTestCase[0].buffer, 48000, 2, Tag{})
+	writer, err := OpenWriter(addPacketTestCase[0].buffer, 48000, 2, 0, Tag{})
 	assert.Nil(err, "OggWriter should be created")
 	assert.NotNil(writer, "OggWriter shouldn't be nil")
 	err = writer.Close()
@@ -234,19 +234,19 @@ func TestOggWriter_AddPacketAndClose(t *testing.T) {
 	addPacketTestCase[0].writer = writer
 
 	// Second test writes tries to write an empty packet
-	writer, err = OpenWriter(addPacketTestCase[1].buffer, 48000, 2, Tag{})
+	writer, err = OpenWriter(addPacketTestCase[1].buffer, 48000, 2, 0, Tag{})
 	assert.Nil(err, "OggWriter should be created")
 	assert.NotNil(writer, "OggWriter shouldn't be nil")
 	addPacketTestCase[1].writer = writer
 
 	// Third test writes tries to write a valid Opus packet
-	writer, err = OpenWriter(addPacketTestCase[2].buffer, 48000, 2, Tag{})
+	writer, err = OpenWriter(addPacketTestCase[2].buffer, 48000, 2, 0, Tag{})
 	assert.Nil(err, "OggWriter should be created")
 	assert.NotNil(writer, "OggWriter shouldn't be nil")
 	addPacketTestCase[2].writer = writer
 
 	// Fourth test tries to write to a nil stream
-	writer, err = OpenWriter(addPacketTestCase[3].buffer, 4800, 2, Tag{})
+	writer, err = OpenWriter(addPacketTestCase[3].buffer, 4800, 2, 0, Tag{})
 	assert.NotNil(err, "IVFWriter shouldn't be created")
 	assert.Nil(writer, "OggWriter should be nil")
 	addPacketTestCase[3].writer = writer

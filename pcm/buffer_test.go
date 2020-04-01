@@ -8,7 +8,7 @@ import (
 )
 
 func TestBuffer_Write(t *testing.T) {
-	reader, err := OpenWavFile("testdata/recording.wav", Ptime10)
+	reader, err := OpenWavFile("testdata/recording.wav", Ptime20)
 	if err != nil {
 		t.Fatal(err)
 	}

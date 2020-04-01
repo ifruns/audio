@@ -391,9 +391,9 @@ func (f *Decoder) doDecode(packet []byte) error {
 				return err
 			}
 
-			frame1 := f.pool.PCM.Get()
+			frame1 := f.pcmPool.Get()
 			copy(frame1, fixed[:len(frame1)])
-			frame2 := f.pool.PCM.Get()
+			frame2 := f.pcmPool.Get()
 			copy(frame2, fixed[len(frame2):])
 
 			// Write the error corrected frame.
@@ -415,7 +415,7 @@ func (f *Decoder) doDecode(packet []byte) error {
 			f.opusSamplesWritten += f.opusFrameSize * framesMissing
 		} else {
 			f.pcmFramesRead += framesMissing
-			pcm := f.pool.PCM.Get()
+			pcm := f.pcmPool.Get()
 			n, err := f.decoder.Decode(frame.Data, pcm)
 			if err != nil {
 				return err
@@ -438,10 +438,10 @@ func (f *Decoder) doDecode(packet []byte) error {
 		}
 	} else {
 		// Allocate buffer.
-		pcm := f.pool.PCM.Get()
+		pcm := f.pcmPool.Get()
 		n, err := f.decoder.Decode(frame.Data, pcm)
 		if err != nil {
-			f.pool.PCM.Release(pcm)
+			f.pcmPool.Release(pcm)
 			return err
 		}
 		if n != len(pcm) {

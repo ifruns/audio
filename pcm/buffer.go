@@ -264,12 +264,16 @@ func (f *Buffer) WriteBlocking(p []int16) error {
 		f.maxDivergence = f.size
 	}
 
-	if f.readerWait {
+	readerWait := f.readerWait
+	if readerWait {
 		f.readerWait = false
-		f.readerWg.Done()
 	}
 
 	f.mu.Unlock()
+
+	if readerWait {
+		f.readerWg.Done()
+	}
 	return nil
 }
 
