@@ -1,10 +1,14 @@
 package resample
 
 /*
-#cgo darwin LDFLAGS: -L./mac -lsoxr
-#cgo linux LDFLAGS: -L./linux -lsoxr
+#cgo darwin CFLAGS: -I./mac
+#cgo darwin LDFLAGS: -L./mac -lsoxr-lib -lm
+#cgo linux CFLAGS: -I./linux
+#cgo linux LDFLAGS: -L./linux -lsoxr-lib -lm
+#include <math.h>
 #include <stdlib.h>
-#include "soxr.h"
+#include <stddef.h>
+#include <soxr.h>
 */
 import "C"
 import (

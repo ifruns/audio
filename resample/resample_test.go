@@ -183,6 +183,7 @@ func TestResample8000_16000(t *testing.T) {
 	}
 
 	ioutil.ReadFile("testing/piano-16k-16-1.wav")
+	_ = res
 }
 
 func BenchmarkResampling(b *testing.B) {
