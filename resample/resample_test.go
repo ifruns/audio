@@ -2,9 +2,13 @@ package resample
 
 import (
 	"bytes"
+	"github.com/pidato/audio/pcm"
+	"github.com/pidato/audio/pool"
 	"io"
 	"io/ioutil"
+	"reflect"
 	"testing"
+	"unsafe"
 )
 
 var NewTest = []struct {
@@ -176,13 +180,52 @@ var BenchData = []struct {
 }
 
 func TestResample8000_16000(t *testing.T) {
-	buffer := bytes.NewBuffer(nil)
-	res, err := New(buffer, 16000.0, 8000.0, 1, I16, HighQ)
+	ptime := 20
+	reader, err := pcm.OpenWavFile("testing/recording.wav", ptime)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	ioutil.ReadFile("testing/piano-16k-16-1.wav")
+	buffer := bytes.NewBuffer(nil)
+	res, err := New(buffer, float64(reader.SampleRate()), 48000.0, 1, I16, HighQ)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	pool, err := pool.Of(8000, ptime)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	outPool := pool.ForPtime(ptime)
+	output := outPool.Get()
+
+	out := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+		Data: uintptr(unsafe.Pointer(&output[0])),
+		Len:  len(output) * 2,
+		Cap:  len(output) * 2,
+	}))
+	_ = out
+
+	for {
+		frame, err := reader.ReadFrame()
+		if len(frame) == 0 {
+			break
+		}
+
+		in := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+			Data: uintptr(unsafe.Pointer(&frame[0])),
+			Len:  len(frame) * 2,
+			Cap:  len(frame) * 2,
+		}))
+
+		i, err := res.Write(in)
+		_ = i
+
+		if err != nil {
+			break
+		}
+	}
 	_ = res
 }
 

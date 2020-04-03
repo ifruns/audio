@@ -14,6 +14,7 @@ import "C"
 import (
 	"errors"
 	"io"
+	"reflect"
 	"runtime"
 	"unsafe"
 )
@@ -85,7 +86,7 @@ func New(writer io.Writer, inputRate, outputRate float64, channels, format, qual
 	// Setup soxr and create a stream resampler
 	ioSpec := C.soxr_io_spec(C.soxr_datatype_t(format), C.soxr_datatype_t(format))
 	qSpec := C.soxr_quality_spec(C.ulong(quality), 0)
-	runtimeSpec := C.soxr_runtime_spec(C.uint(threads))
+	runtimeSpec := C.soxr_runtime_spec(C.uint(0))
 	soxr = C.soxr_create(C.double(inputRate), C.double(outputRate), C.uint(channels), &soxErr, &ioSpec, &qSpec, &runtimeSpec)
 	if C.GoString(soxErr) != "" && C.GoString(soxErr) != "0" {
 		err = errors.New(C.GoString(soxErr))
@@ -123,6 +124,80 @@ func (r *Resampler) Close() (err error) {
 	}
 	C.soxr_delete(r.resampler)
 	r.resampler = nil
+	return
+}
+
+func (r *Resampler) Resample(in []int16, out []int16) (i int, err error) {
+	if r.resampler == nil {
+		err = errors.New("soxr resampler is nil")
+		return
+	}
+	if len(in) == 0 {
+		return
+	}
+	//if fragment := len(in) % (r.frameSize * r.channels); fragment != 0 {
+	//	// Drop fragmented frames from the end of input data
+	//	p = p[:len(p)-fragment]
+	//}
+	framesIn := len(in)
+	if framesIn == 0 {
+		err = errors.New("incomplete input frame data")
+		return
+	}
+	framesOut := int(float64(framesIn) * (r.outRate / r.inRate))
+	if framesOut == 0 {
+		err = errors.New("not enough input to generate output")
+		return
+	}
+	if len(out) < framesOut {
+		err = errors.New("out buffer not large enough")
+		return
+	}
+
+	//dataIn := C.CBytes(*(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+	//	Data: uintptr(unsafe.Pointer(&in[0])),
+	//	Len:  len(in) * 2,
+	//	Cap:  len(in) * 2,
+	//})))
+	dataIn := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&in)).Data)
+	//dataOut := C.CBytes(*(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
+	//	Data: uintptr(unsafe.Pointer(&out[0])),
+	//	Len:  len(out) * 2,
+	//	Cap:  len(out) * 2,
+	//})))
+	dataOut := unsafe.Pointer((*reflect.SliceHeader)(unsafe.Pointer(&out)).Data)
+
+	var soxErr C.soxr_error_t
+	var read, done C.size_t = 0, 0
+	//var written int
+	for int(done) < framesOut {
+		soxErr = C.soxr_process(r.resampler, C.soxr_in_t(dataIn), C.size_t(framesIn), &read, C.soxr_out_t(dataOut), C.size_t(framesOut), &done)
+		if C.GoString(soxErr) != "" && C.GoString(soxErr) != "0" {
+			err = errors.New(C.GoString(soxErr))
+			goto cleanup
+		}
+		if int(read) == framesIn && int(done) < framesOut {
+			// Indicate end of input to the resampler
+			var d C.size_t = 0
+			soxErr = C.soxr_process(r.resampler, C.soxr_in_t(nil), C.size_t(0), nil, C.soxr_out_t(dataOut), C.size_t(framesOut), &d)
+			if C.GoString(soxErr) != "" && C.GoString(soxErr) != "0" {
+				err = errors.New(C.GoString(soxErr))
+				goto cleanup
+			}
+			done += d
+			break
+		}
+	}
+
+	i = framesOut
+	err = nil
+
+cleanup:
+	//C.free(dataIn)
+	//C.free(dataOut)
+	if soxErr != nil {
+		C.free(unsafe.Pointer(soxErr))
+	}
 	return
 }
 
