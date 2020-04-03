@@ -93,11 +93,17 @@ func TestDownSampleBy2(t *testing.T) {
 	}
 
 	fout, err := os.OpenFile("8000.pcm", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
 	var state [8]int32
 	frames8000 := make([][]int16, 0, 128)
 	for _, frame := range frames20ms {
 		out := make([]int16, 160)
-		DownSampleBy2(frame, out, &state)
+		err = DownSampleBy2(frame, out, &state)
+		if err != nil {
+			t.Fatal(err)
+		}
 		frames8000 = append(frames8000, out)
 
 		b := *(*[]byte)(unsafe.Pointer(&reflect.SliceHeader{
@@ -148,6 +154,9 @@ func TestUpSample8000to16000(t *testing.T) {
 	}
 
 	fout, err := os.OpenFile("16000.pcm", os.O_TRUNC|os.O_CREATE|os.O_WRONLY, 0755)
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	var state [8]int32
 	for i := 0; i < len(all); i += 320 {

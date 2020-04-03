@@ -134,6 +134,8 @@ func (v *VAD) Close() error {
 	return nil
 }
 
+// Down-sample frequency in half.
+// 16000 -> 8000
 func DownSampleBy2(in []int16, out []int16, state *[8]int32) error {
 	if len(out) != len(in)/2 {
 		return errors.New("out must be have the size of in")
@@ -147,6 +149,8 @@ func DownSampleBy2(in []int16, out []int16, state *[8]int32) error {
 	return nil
 }
 
+// Up-sample frequency by double.
+// 8000 -> 16000
 func UpSampleBy2(in []int16, out []int16, state *[8]int32) error {
 	if len(out) != len(in)*2 {
 		return errors.New("out must be have the size of in")
