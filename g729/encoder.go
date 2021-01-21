@@ -51,9 +51,9 @@ func (e *Encoder) Encode(frame10ms []int16, encoded []byte) error {
 	if len(frame10ms) != 80 {
 		return errors.New("frame10ms must be exactly 80 samples")
 	}
-	if len(encoded) < 80 {
-		return errors.New("encoded size is too small")
-	}
+	//if len(encoded) < 80 {
+	//	return errors.New("encoded size is too small")
+	//}
 
 	input := unsafe.Pointer(&frame10ms[0])
 	output := unsafe.Pointer(&encoded[0])
