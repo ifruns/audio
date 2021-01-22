@@ -7,7 +7,6 @@ package g729
 */
 import "C"
 import (
-	"errors"
 	"os"
 	"unsafe"
 )
@@ -47,15 +46,14 @@ func (e *Encoder) Close() error {
 /*           if VAD/DTX is enabled                                           */
 /*                                                                           */
 /*****************************************************************************/
-func (e *Encoder) Encode(frame10ms []int16, encoded []byte) error {
-	if len(frame10ms) != 80 {
-		return errors.New("frame10ms must be exactly 80 samples")
-	}
+func (e *Encoder) Encode(frame20ms []int16, encoded []byte) error {
+	//if len(frame10ms) != 80 {
+	//	return errors.New("frame10ms must be exactly 80 samples")
+	//}
 	//if len(encoded) < 80 {
 	//	return errors.New("encoded size is too small")
 	//}
-
-	input := unsafe.Pointer(&frame10ms[0])
+	input := unsafe.Pointer(&frame20ms[0])
 	output := unsafe.Pointer(&encoded[0])
 	var bitStreamLength C.uint8_t
 	C.bcg729Encoder(e.enc, (*C.int16_t)(input), (*C.uint8_t)(output), &bitStreamLength)
